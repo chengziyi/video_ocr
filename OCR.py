@@ -3,6 +3,8 @@ import os
 import cv2
 import base64
 import time
+import shutil
+import argparse
 
 def timmer(func):
     def deco(*args, **kwargs):
@@ -19,6 +21,13 @@ class Ocr(object):
     def __init__(self):
         self.url = 'http://10.8.1.6:10124/api/tr-run/'
         # self.url = 'http://172.17.0.3:10124/api/tr-run/'
+
+    def pick_chinese(self, check_str):
+        res_str=''
+        for ch in check_str:
+            if u'\u4e00' <= ch <= u'\u9fef' or ch in ['，','。','、','“','”','：'] or '0'<=ch<='9' or 'a'<=ch<='z' or 'A'<=ch<='Z':
+                res_str += ch
+        return res_str
 
     def check_contain_chinese(self, check_str):
         for ch in check_str:
@@ -55,7 +64,7 @@ class Ocr(object):
         ## input two str
         max_length = 0
         max_last_index = 0
-        dp = [[0]*(len(text_str)+1)]*(len(ocr_str)+1)
+        dp = [[0]*(len(text_str)+1) for i in range(len(ocr_str)+1)]
         for i in range(len(ocr_str)):
             for j in range(len(text_str)):
                 if ocr_str[i] == text_str[j]:
@@ -68,7 +77,8 @@ class Ocr(object):
             sub_str = ocr_str[max_last_index-max_length+1:max_last_index+1]
         else:
             sub_str = ''
-
+        print(ocr_str)
+        print(text_str)
         return sub_str, max_length
 
     def request_img(self, img_data):
@@ -110,7 +120,7 @@ class Ocr(object):
         return [keep_data_list[0]]
 
     @timmer
-    def run(self, input_video, input_txt, output_text):
+    def run(self, input_video, input_txt, output_text, error_path=None):
         ## read text
         with open(input_txt, 'r') as f:
             text_data = f.readlines()
@@ -158,9 +168,10 @@ class Ocr(object):
                     cur_time = frame_id/fps_video
                     if cur_time%10==0:
                         print(f"frame:{frame_id}, time(sec):{cur_time}")
+
                     ## 截取字幕区域,ocr识别
                     frame = frame[595:690, :]
-                    cv2.imwrite('tmp.jpg',frame)
+                    # cv2.imwrite('tmp.jpg',frame)
                     img_str = cv2.imencode('.png', frame)[1].tobytes()
                     data = self.request_img(img_str)
                     if len(data) > 1:
@@ -170,6 +181,7 @@ class Ocr(object):
                             continue
                     for i in range(len(data)):
                         ocr_text = data[i][1]
+                        ocr_text = self.pick_chinese(ocr_text)
                         if ocr_text !='' and self.check_contain_chinese(ocr_text):
                             ## ocr去重
                             if ocr_text not in ocr_text_list:
@@ -187,7 +199,8 @@ class Ocr(object):
                                     ## 注意:最长公共子串有可能不是刚好位于开头或结尾
                                     str_start = cur_text.find(common_str)
                                     str_end = str_start + len(common_str)
-                                    if str_start == 0:
+                                    print(f'debug: {common_str} {str_start}')
+                                    if str_start <= 5:
                                         time_start = cur_time
                                         if time_last <= time_start:
                                             if time_last != 0:
@@ -216,19 +229,27 @@ class Ocr(object):
         result_data_len = len(final_result)
         if result_data_len != ori_data_len:
             print("check result: ", result_path)
+            if error_path is not None:
+                shutil.copy(result_path, error_path)
 
 if __name__=='__main__':
-    # video_path = './北京-风景1.mp4'
-    # input_txt = './2.txt'
-    # result_path = './result.txt'
-    # Ocr().run(video_path, input_txt, result_path)
-    video_dir = 'tmp'
+    error_result_dir = './error_result'
+    output_dir = './output'
+    assert os.path.exists(error_result_dir)
+    assert os.path.exists(output_dir)
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--video_dir',default=None)
+    video_dir = parser.parse_args().video_dir
+    assert video_dir is not None
+    print(video_dir)
     for video_name in os.listdir(video_dir):
         if video_name[-4:] == '.mp4':
             video_path = os.path.join(video_dir, video_name)
             txt_name = video_name.replace('.mp4', '.txt')
             input_txt = os.path.join(video_dir, txt_name)
-            result_path = os.path.join(video_dir, 'res_'+txt_name)
+            result_path = os.path.join(output_dir, 'res_'+txt_name)
             print(video_name)
             print(txt_name)
-            Ocr().run(video_path, input_txt, result_path)
+            error_path = os.path.join(error_result_dir, txt_name)
+            Ocr().run(video_path, input_txt, result_path, error_path)
