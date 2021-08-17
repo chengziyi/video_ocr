@@ -96,7 +96,11 @@ class Ocr(object):
                 data_str_list.append(i[1])
 
             data_str = ''.join(data_str_list)
-            combine_data = [[0,0,0], data_str, 1.0]
+            data_str2 = ''
+            for ch in data_str:
+                if not 'a'<=ch<='z':
+                    data_str2+=ch
+            combine_data = [[0,0,0], data_str2, 1.0]
             keep_data_list.insert(0, combine_data)
             print(keep_data_list)
         elif len(keep_data_list) == 0:
@@ -111,7 +115,7 @@ class Ocr(object):
         with open(input_txt, 'r') as f:
             text_data = f.readlines()
         text_data_iter = iter(text_data)
-
+        ori_data_len = len(text_data)
         #读取视频
         cap = cv2.VideoCapture(input_video)
         #获取视频帧率
@@ -155,7 +159,8 @@ class Ocr(object):
                     if cur_time%10==0:
                         print(f"frame:{frame_id}, time(sec):{cur_time}")
                     ## 截取字幕区域,ocr识别
-                    frame = frame[600:660, :]
+                    frame = frame[595:690, :]
+                    cv2.imwrite('tmp.jpg',frame)
                     img_str = cv2.imencode('.png', frame)[1].tobytes()
                     data = self.request_img(img_str)
                     if len(data) > 1:
@@ -208,8 +213,22 @@ class Ocr(object):
         with open(result_path, 'w') as f:
             f.writelines(final_result)
 
+        result_data_len = len(final_result)
+        if result_data_len != ori_data_len:
+            print("check result: ", result_path)
+
 if __name__=='__main__':
-    video_path = './2.mp4'
-    input_txt = './2.txt'
-    result_path = './result.txt'
-    Ocr().run(video_path, input_txt, result_path)
+    # video_path = './北京-风景1.mp4'
+    # input_txt = './2.txt'
+    # result_path = './result.txt'
+    # Ocr().run(video_path, input_txt, result_path)
+    video_dir = 'tmp'
+    for video_name in os.listdir(video_dir):
+        if video_name[-4:] == '.mp4':
+            video_path = os.path.join(video_dir, video_name)
+            txt_name = video_name.replace('.mp4', '.txt')
+            input_txt = os.path.join(video_dir, txt_name)
+            result_path = os.path.join(video_dir, 'res_'+txt_name)
+            print(video_name)
+            print(txt_name)
+            Ocr().run(video_path, input_txt, result_path)
