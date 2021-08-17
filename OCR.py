@@ -238,8 +238,10 @@ class Ocr(object):
                 remove_idx.append(i+1)
             else:
                 tmp_result.append(final_result[i])
-
-        tmp_result.append(final_result[-1])
+        try:
+            tmp_result.append(final_result[-1])
+        except:
+            pass
         if len(remove_idx)>0:
             for i in remove_idx:
                 try:
