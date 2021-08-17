@@ -198,8 +198,8 @@ class Ocr(object):
                                     ## 判断公共子串处于字幕段落的开头还是结尾
                                     ## 注意:最长公共子串有可能不是刚好位于开头或结尾
                                     str_start = cur_text.find(common_str)
-                                    str_end = str_start + len(common_str)
-                                    print(f'debug: {common_str} {str_start}')
+                                    str_end = cur_text.rfind(common_str) + len(common_str)
+                                    print(f'debug: {common_str} {str_start} {str_end}')
                                     if str_start <= 5:
                                         time_start = cur_time
                                         if time_last <= time_start:
@@ -211,7 +211,7 @@ class Ocr(object):
                                             time_last = time_start
 
                                     ## 字幕段落结尾
-                                    if str_end == len(cur_text.strip('。\n')):
+                                    if str_end >= len(cur_text.strip('。\n'))-4:
                                         try:
                                             cur_text = next(text_data_iter)
                                             if cur_text == '\n':
@@ -220,15 +220,38 @@ class Ocr(object):
                                             print('no more text data')
                                             print(f'cur_result:{cur_result}, time_last:{time_last}')
                                             dura_str = f"{time_last}-{total_time}"
-                                            cur_result = '\t'.join([cur_result.strip('\n'), dura_str])
-                                            final_result.append(cur_result + '\n')
+                                            if cur_result.find('\t')==-1:
+                                                cur_result = '\t'.join([cur_result.strip('\n'), dura_str])
+                                                final_result.append(cur_result + '\n')
 
+        ## 把重复的内容合并，只合并有两条重复的，如果出现多条重复说明错误
+        tmp_result = []
+        remove_idx=[]
+        for i in range(len(final_result)-1):
+            text1=final_result[i].split('\t')[0]
+            text2=final_result[i+1].split('\t')[0]
+            time_range1=final_result[i].split('\t')[1]
+            time_range2=final_result[i+1].split('\t')[1]
+            if text1==text2:
+                time_range=time_range1.split('-')[0]+'-'+time_range2.split('-')[1]
+                tmp_result.append('\t'.join([text1, time_range]))
+                remove_idx.append(i+1)
+            else:
+                tmp_result.append(final_result[i])
+
+        tmp_result.append(final_result[-1])
+        if len(remove_idx)>0:
+            for i in remove_idx:
+                try:
+                    tmp_result.pop(i)
+                except:
+                    pass
         with open(result_path, 'w') as f:
-            f.writelines(final_result)
+            f.writelines(tmp_result)
 
-        result_data_len = len(final_result)
+        result_data_len = len(tmp_result)
         if result_data_len != ori_data_len:
-            print("check result: ", result_path)
+            print("check result: ", result_path, ' result_len:', result_data_len, ' ori_len:',ori_data_len)
             if error_path is not None:
                 shutil.copy(result_path, error_path)
 
