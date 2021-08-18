@@ -61,6 +61,9 @@ class Ocr(object):
         print(data)
 
     def lcs(self, ocr_str, text_str):
+        if text_str.find(ocr_str) != -1:
+            return '__'.join([ocr_str, ocr_str]), len(ocr_str)
+        ## 取所有公共子串，返回第一个和最后一个，要求长度大于1
         ## input two str
         max_length = 0
         max_last_index = 0
@@ -77,9 +80,48 @@ class Ocr(object):
             sub_str = ocr_str[max_last_index-max_length+1:max_last_index+1]
         else:
             sub_str = ''
+
         print(ocr_str)
         print(text_str)
-        return sub_str, max_length
+        str_start = text_str.find(sub_str)
+        str_end = text_str.rfind(sub_str) + len(sub_str)
+        if str_start==-1 or 25<=str_start<=len(text_str)-25:
+            print(str_start, str_end)
+            return '',-1
+
+        if max_length==1:
+            print('max_length is 1, lcs result may be wrong')
+            max_length=0
+        # 挑出所有公共子串，保留长度大于1的，去除重复的
+        common_str_list=[]
+        for i in range(len(ocr_str)):
+            for j in range(len(text_str)):
+                if dp[i][j]==1:
+                    ii=i
+                    jj=j
+                    try:
+                        while(dp[ii+1][jj+1]==dp[ii][jj]+1):
+                            ii+=1
+                            jj+=1
+                    except:
+                        pass
+                    length=dp[ii][jj]
+                    index=ii
+                    # print(f'length:{length} index:{index}')
+                    common_str = ocr_str[index-length:index]
+                    if len(common_str)>1:
+                        common_str_list.append(common_str)
+
+        for i in common_str_list:
+            if (i != sub_str) and (i in sub_str):
+                common_str_list.remove(i)
+
+        # print(common_str_list)
+        if len(common_str_list)==0:
+            return '__'.join([sub_str, sub_str]), max_length
+        else:
+            start_end='__'.join([common_str_list[0],common_str_list[-1]])
+            return start_end, max_length
 
     def request_img(self, img_data):
         img_b64 = base64.b64encode(img_data)
@@ -118,6 +160,24 @@ class Ocr(object):
             return None
 
         return [keep_data_list[0]]
+
+    def remove_repeat(self, data):
+        tmp_dict=dict()
+        for i in data:
+            text,time_range=i.split('\t')
+            if text not in tmp_dict:
+                tmp_dict[text]=time_range
+            else:
+                cur_time_range=tmp_dict[text]
+                new_time_range=cur_time_range.split('-')[0]+'-'+time_range.split('-')[1]
+                tmp_dict[text] = new_time_range
+
+        data.clear()
+        for i in tmp_dict.items():
+            (text,time)=i
+            data.append('\t'.join([text, time]))
+
+        return data
 
     @timmer
     def run(self, input_video, input_txt, output_text, error_path=None):
@@ -187,20 +247,24 @@ class Ocr(object):
                             if ocr_text not in ocr_text_list:
                                 ocr_text_list.append(ocr_text)
 
-                                ## 检查ocr结果是否包含在字幕段落中,求最长公共子串
-                                ## 如果LCS存在且长度大于阈值则认为ocr结果是正确的,否则说明ocr识别了错误的内容
+                                ## 检查ocr结果是否包含在字幕段落中,求公共子串
+                                ## 如果CS存在且长度大于阈值则认为ocr结果是正确的,否则说明ocr识别了错误的内容
                                 ## 如果ocr识别了错误的内容, 丢弃
+                                ## 求所有公共子串，第一个子串匹配开头，最后一个子串匹配结尾
                                 common_str, lcs_length = self.lcs(ocr_text, cur_text)
                                 if lcs_length==0:
                                     print(f'check ocr result:\n',f'ocr:{ocr_text}\n',
                                         f'text:{cur_text}')
+                                elif lcs_length==-1:
+                                    print(f'ocr_text not in start or end, ocr:{ocr_text}, text:{cur_text}')
                                 else:
                                     ## 判断公共子串处于字幕段落的开头还是结尾
-                                    ## 注意:最长公共子串有可能不是刚好位于开头或结尾
-                                    str_start = cur_text.find(common_str)
-                                    str_end = cur_text.rfind(common_str) + len(common_str)
+                                    ## 可能不是刚好位于开头或结尾，误差范围
+                                    common_start,common_end = common_str.split('__')
+                                    str_start = cur_text.find(common_start)
+                                    str_end = cur_text.rfind(common_end) + len(common_end)
                                     print(f'debug: {common_str} {str_start} {str_end}')
-                                    if str_start <= 5:
+                                    if str_start < 4:
                                         time_start = cur_time
                                         if time_last <= time_start:
                                             if time_last != 0:
@@ -224,34 +288,13 @@ class Ocr(object):
                                                 cur_result = '\t'.join([cur_result.strip('\n'), dura_str])
                                                 final_result.append(cur_result + '\n')
 
-        ## 把重复的内容合并，只合并有两条重复的，如果出现多条重复说明错误
-        tmp_result = []
-        remove_idx=[]
-        for i in range(len(final_result)-1):
-            text1=final_result[i].split('\t')[0]
-            text2=final_result[i+1].split('\t')[0]
-            time_range1=final_result[i].split('\t')[1]
-            time_range2=final_result[i+1].split('\t')[1]
-            if text1==text2:
-                time_range=time_range1.split('-')[0]+'-'+time_range2.split('-')[1]
-                tmp_result.append('\t'.join([text1, time_range]))
-                remove_idx.append(i+1)
-            else:
-                tmp_result.append(final_result[i])
-        try:
-            tmp_result.append(final_result[-1])
-        except:
-            pass
-        if len(remove_idx)>0:
-            for i in remove_idx:
-                try:
-                    tmp_result.pop(i)
-                except:
-                    pass
-        with open(result_path, 'w') as f:
-            f.writelines(tmp_result)
+        ## 把重复的内容合并, 同一段文本如果对应多个时间就合并，如果出现多条重复说明错误
+        final_result = self.remove_repeat(final_result)
 
-        result_data_len = len(tmp_result)
+        with open(result_path, 'w') as f:
+            f.writelines(final_result)
+
+        result_data_len = len(final_result)
         if result_data_len != ori_data_len:
             print("check result: ", result_path, ' result_len:', result_data_len, ' ori_len:',ori_data_len)
             if error_path is not None:
@@ -278,3 +321,8 @@ if __name__=='__main__':
             print(txt_name)
             error_path = os.path.join(error_result_dir, txt_name)
             Ocr().run(video_path, input_txt, result_path, error_path)
+
+    # str1='团城位于北海公园南门西侧'
+    # str2='团城位于北海公园南门西侧享有“北京城中之城”之称团城风光如画苍松翠柏碧瓦朱恒的建筑构成了北京市内最优美的风景区团城上有金代所值的栝子松距今有800多年的历史是北京最古老的树林还有数百年树龄的白皮松两颗探海松一颗后天帝曾封栝子人参为“遮荫侯”白 皮人参为“白袍将军”探海松为“探海猴”三树结树色苍翠更加衬托出团城的幽静环境。团成员是太液池中的一个小岛金代为大宁宫一部分元代称圆坻亦称瀛洲岛四周砌圆形城墙城'
+    # res=Ocr().lcs(str1,str2)
+    # print(res)
