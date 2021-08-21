@@ -19,13 +19,13 @@ def timmer(func):
 
 class Ocr(object):
     def __init__(self):
-        self.url = 'http://10.8.1.6:10124/api/tr-run/'
+        self.url = 'http://10.8.1.1:10124/api/tr-run/'
         # self.url = 'http://172.17.0.3:10124/api/tr-run/'
 
     def pick_chinese(self, check_str):
         res_str=''
         for ch in check_str:
-            if u'\u4e00' <= ch <= u'\u9fef' or ch in ['，','。','、','“','”','：'] or '0'<=ch<='9' or 'a'<=ch<='z' or 'A'<=ch<='Z':
+            if u'\u4e00' <= ch <= u'\u9fef' or ch in ['，','。','、','：'] or '0'<=ch<='9' or 'a'<=ch<='z' or 'A'<=ch<='Z':
                 res_str += ch
         return res_str
 
@@ -60,10 +60,7 @@ class Ocr(object):
             return
         print(data)
 
-    def lcs(self, ocr_str, text_str):
-        if text_str.find(ocr_str) != -1:
-            return '__'.join([ocr_str, ocr_str]), len(ocr_str)
-        ## 取所有公共子串，返回第一个和最后一个，要求长度大于1
+    def _lcs(self, ocr_str, text_str):
         ## input two str
         max_length = 0
         max_last_index = 0
@@ -80,19 +77,14 @@ class Ocr(object):
             sub_str = ocr_str[max_last_index-max_length+1:max_last_index+1]
         else:
             sub_str = ''
+        return sub_str, max_length,dp
 
-        print(ocr_str)
-        print(text_str)
-        str_start = text_str.find(sub_str)
-        str_end = text_str.rfind(sub_str) + len(sub_str)
-        if str_start==-1 or 25<=str_start<=len(text_str)-25:
-            print(str_start, str_end)
-            return '',-1
+    def find_all_cs(self, ocr_str, text_str):
+        sub_str,max_length,dp = self._lcs(ocr_str, text_str)
+        if sub_str=='' or max_length==1:
+            print('lcs result may be wrong')
+            return sub_str,0
 
-        if max_length==1:
-            print('max_length is 1, lcs result may be wrong')
-            max_length=0
-        # 挑出所有公共子串，保留长度大于1的，去除重复的
         common_str_list=[]
         for i in range(len(ocr_str)):
             for j in range(len(text_str)):
@@ -116,12 +108,43 @@ class Ocr(object):
             if (i != sub_str) and (i in sub_str):
                 common_str_list.remove(i)
 
-        # print(common_str_list)
         if len(common_str_list)==0:
             return '__'.join([sub_str, sub_str]), max_length
         else:
             start_end='__'.join([common_str_list[0],common_str_list[-1]])
             return start_end, max_length
+
+    def lcs(self, ocr_str, text_str):
+        text_str = text_str.replace('，','')
+        text_str = text_str.replace('。','')
+        text_str = text_str.replace('“','')
+        text_str = text_str.replace('”','')
+        if text_str.find(ocr_str) != -1:
+            return '__'.join([ocr_str, ocr_str]), len(ocr_str)
+
+        sub_str,max_length,_ = self._lcs(ocr_str, text_str)
+        if sub_str=='' or max_length==1:
+            print('lcs result may be wrong')
+            return sub_str,0
+
+        ## 取所有公共子串，返回第一个和最后一个，要求长度大于1
+        print(ocr_str)
+        print(text_str)
+        str_start = text_str.find(sub_str)
+        str_end = text_str.rfind(sub_str) + len(sub_str)
+        if str_start==-1 or 25<=str_start<=len(text_str)-25:
+            print(str_start, str_end)
+            return '',-1
+
+        # return '__'.join([sub_str, sub_str]), max_length
+
+        ## 挑出所有公共子串，保留长度大于1的，去除重复的
+        ## ocr_str , text_str[:25] & text_str[-25:]
+        if str_start<25:
+            start_end, max_length = self.find_all_cs(ocr_str, text_str[:25])
+        elif str_start>len(text_str)-25:
+            start_end, max_length = self.find_all_cs(ocr_str, text_str[-25:])
+        return start_end, max_length
 
     def request_img(self, img_data):
         img_b64 = base64.b64encode(img_data)
