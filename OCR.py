@@ -115,10 +115,6 @@ class Ocr(object):
             return start_end, max_length
 
     def lcs(self, ocr_str, text_str):
-        text_str = text_str.replace('，','')
-        text_str = text_str.replace('。','')
-        text_str = text_str.replace('“','')
-        text_str = text_str.replace('”','')
         if text_str.find(ocr_str) != -1:
             return '__'.join([ocr_str, ocr_str]), len(ocr_str)
 
@@ -207,6 +203,9 @@ class Ocr(object):
         ## read text
         with open(input_txt, 'r') as f:
             text_data = f.readlines()
+        for i in range(len(text_data)):
+            text_data[i] = text_data[i].replace('“','')
+            text_data[i] = text_data[i].replace('”','')
         text_data_iter = iter(text_data)
         ori_data_len = len(text_data)
         #读取视频
@@ -298,7 +297,7 @@ class Ocr(object):
                                             time_last = time_start
 
                                     ## 字幕段落结尾
-                                    if str_end >= len(cur_text.strip('。\n'))-4:
+                                    if str_end >= len(cur_text.strip('\n'))-4:
                                         try:
                                             cur_text = next(text_data_iter)
                                             if cur_text == '\n':
@@ -313,7 +312,6 @@ class Ocr(object):
 
         ## 把重复的内容合并, 同一段文本如果对应多个时间就合并，如果出现多条重复说明错误
         final_result = self.remove_repeat(final_result)
-
         with open(result_path, 'w') as f:
             f.writelines(final_result)
 
